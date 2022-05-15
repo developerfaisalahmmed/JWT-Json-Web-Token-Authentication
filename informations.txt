@@ -1,0 +1,309 @@
+Laravel 9.x JWT (Json Web Token) Authentication Example
+
+Hello Artisan 
+
+In this tutorial i am going to discuss about a brand new topic which is jwt auth laravel 8. This tutorial we will see how to create a restful api with json web token (jwt).
+
+JWT stand for Json Web Token. JWT will helps to create authentication and connect front-end and back-end function. JWT through we can create login and register API. So first we have to install "tymon/jwt-auth" package in laravel 8.
+
+In this post i want to share you how to create API in Laravel 8 with using JWT, If you are beginner then It is a very simple way to create and it is pretty easy to undestand how to create laravel 8 jwt auth.
+
+ 
+
+    Github link : Laravel REST API development with JWT
+
+ 
+
+In this lesson we will create login, registration and full crud system with JWT authentication with Laravel 6. We will also use jwt middleware laravel.
+
+ 
+
+    Read also : Laravel 6 REST API with Passport Tutorial with Ecommerce Project
+
+ 
+
+In this Laravel JWT authentication tutorial we are going to make this kind of API using JWT. You have to just follow few step to get following web services.
+
+    Login API
+    Register API
+    Logout API
+
+ 
+
+Let's start building our Rest Api using JWT authentication.
+
+    Step 1: Install Laravel 
+
+I am going to explain step by step laravel jwt auth from scratch so, we need to get fresh Laravel 6 application using bellow command
+
+composer create-project --prefer-dist laravel/laravel api
+
+PHP
+
+ 
+
+    Step 2: Install  tymondesigns/jwt-auth Package
+
+First fire following command on your terminal.
+
+Installation Package
+
+composer require tymon/jwt-auth
+
+PHP
+
+ 
+
+It will install the package in the vendor folder and our composer.json file will be updated. Now go to the config/app.php file and add the following.
+
+config/app.php
+
+'providers' => [
+    ....
+    'Tymon\JWTAuth\Providers\JWTAuthServiceProvider',
+],
+'aliases' => [
+    ....
+    'JWTAuth' => 'Tymon\JWTAuth\Facades\JWTAuth',
+    'JWTFactory' => 'Tymon\JWTAuth\Facades\JWTFactory',
+],
+
+PHP
+
+ 
+
+To publish the configuration file in Laravel, you need to run following line of code 
+
+php artisan vendor:publish --provider="Tymon\JWTAuth\Providers\JWTAuthServiceProvider"
+
+PHP
+
+ 
+
+    Step 3 : Generate JWT Key
+
+JWT tokens will be signed with an encryption key. Run the following command to generate jwt key.
+
+php artisan jwt:generate
+
+PHP
+
+ 
+
+If you find an error like this after hit the above command.
+
+    ReflectionException : Method Tymon\JWTAuth\Commands\JWTGenerateCommand::handle() does not exist
+
+ 
+
+then open JWTGenerateCommand.php file and paste this following code, Hope it will work.
+
+vendor/tymon/src/Commands/JWTGenerateCommand.php
+
+public function handle() {
+ 
+  $this->fire(); 
+
+}
+
+PHP
+
+ 
+
+    Step 4 : Registering Middleware
+
+JWT auth package comes up with middlewares that we can use. Register auth.jwt middleware in 
+
+app/Http/Kernel.php
+
+protected $routeMiddleware = [
+
+    'auth.jwt' => 'auth.jwt' => 'Tymon\JWTAuth\Middleware\GetUserFromToken',
+
+];
+
+PHP
+
+ 
+
+This middleware verifies that the user is authenticated by checking the token sent with the request. If the user is not authenticated, the middleware will throw UnauthorizedHttpException exception.
+
+ 
+
+    Step 5 : Create Api Routes
+
+Now we need to create api route for jwt auth. paste this following code to this path
+
+routes/api.php 
+
+Route::post('login', 'ApiController@login');
+Route::post('register', 'ApiController@register');
+ 
+Route::group(['middleware' => 'auth.jwt'], function () {
+
+    Route::get('logout', 'ApiController@logout');
+ 
+});
+
+PHP
+
+ 
+
+    Step 6 : Update User Model
+
+Now open user model and paste this following code to make changes.
+
+app/User.php
+
+namespace App;
+
+use Illuminate\Notifications\Notifiable;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+
+class User extends Authenticatable
+{
+    use Notifiable;
+
+    protected $fillable = [
+        'name', 'email', 'password',
+    ];
+
+    protected $hidden = [
+        'password', 'remember_token',
+    ];
+
+}
+
+PHP
+
+ 
+
+Let’s write the logic for restful API in laravel using JWT authentication. We need to validate our request data. So run below command to make a register request.
+
+php artisan make:request RegisterAuthRequest
+
+PHP
+
+ 
+
+After running this command just open this file going following directory and paste below code.
+
+app/Http/Requests/RegisterAuthRequest.php
+
+namespace App\Http\Requests;
+
+use Illuminate\Foundation\Http\FormRequest;
+
+class RegisterAuthRequest extends FormRequest
+{
+    public function authorize()
+    {
+        return true;
+    }
+
+    public function rules()
+    {
+        return [
+            'name' => 'required|string',
+            'email' => 'required|email|unique:users',
+            'password' => 'required|string|min:6|max:10'
+        ];
+    }
+}
+
+PHP
+
+ 
+
+    Step 7 : Create Controller
+
+Now we have to create our controller to make jwt auth. So run below command
+
+php artisan make:controller ApiController
+
+PHP
+
+ 
+
+Now open this ApiController and paste this below code
+
+app/Http/Controllers/ApiController.php
+
+namespace App\Http\Controllers;
+
+use JWTAuth;
+use App\User;
+use Illuminate\Http\Request;
+use App\Http\Requests\RegisterAuthRequest;
+use Tymon\JWTAuth\Exceptions\JWTException;
+use Symfony\Component\HttpFoundation\Response;
+
+class ApiController extends Controller
+{
+    public $loginAfterSignUp = true;
+ 
+    public function register(RegisterAuthRequest $request)
+    {
+        $user = new User();
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->password = bcrypt($request->password);
+        $user->save();
+ 
+        if ($this->loginAfterSignUp) {
+            return $this->login($request);
+        }
+ 
+        return response()->json([
+            'success' => true,
+            'data' => $user
+        ], Response::HTTP_OK);
+    }
+ 
+    public function login(Request $request)
+    {
+        $input = $request->only('email', 'password');
+        $jwt_token = null;
+ 
+        if (!$jwt_token = JWTAuth::attempt($input)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid Email or Password',
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+ 
+        return response()->json([
+            'success' => true,
+            'token' => $jwt_token,
+        ]);
+    }
+ 
+    public function logout(Request $request)
+    {
+        $this->validate($request, [
+            'token' => 'required'
+        ]);
+ 
+        try {
+            JWTAuth::invalidate($request->token);
+ 
+            return response()->json([
+                'success' => true,
+                'message' => 'User logged out successfully'
+            ]);
+        } catch (JWTException $exception) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Sorry, the user cannot be logged out'
+            ], Response::HTTP_INTERNAL_SERVER_ERROR);
+        }
+    }
+}
+
+PHP
+
+ 
+
+Now everything is done. We can check it now. So run below command to start our server and take a tour to test it with postman.
+
+php artisan serve
